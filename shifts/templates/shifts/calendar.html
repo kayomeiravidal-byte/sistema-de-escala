@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Work Scheduling System</title>
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- FullCalendar CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/index.global.min.css" rel="stylesheet">
+    <style>
+        body { background-color: #f8f9fa; }
+        .sidebar { background-color: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .calendar-container { background-color: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .shift-event { cursor: pointer; }
+        .employee-item { cursor: pointer; padding: 5px; margin: 2px 0; border-radius: 4px; }
+        .employee-item:hover { background-color: #e9ecef; }
+        .employee-selected { background-color: #007bff; color: white; }
+    </style>
+</head>
+<body>
+    <div class="container-fluid mt-4">
+        <div class="row">
+            <div class="col-md-12 mb-4">
+                <h1 class="text-center">Work Scheduling System</h1>
+            </div>
+        </div>
+        <div class="row">
+            <!-- Sidebar -->
+            <div class="col-md-3">
+                <div class="sidebar">
+                    <h4>Employees</h4>
+                    <div id="employee-list">
+                        {% for employee in employees %}
+                        <div class="employee-item" data-id="{{ employee.id }}">
+                            {{ employee.name }}
+                        </div>
+                        {% endfor %}
+                    </div>
+
+                    <hr>
+
+                    <h4>Shift Types</h4>
+                    <div id="shift-types">
+                        {% for shift_type in shift_types %}
+                        <div class="mb-2">
+                            <span class="badge" style="background-color: {{ shift_type.color }};">{{ shift_type.name }}</span>
+                        </div>
+                        {% endfor %}
+                    </div>
+
+                    <hr>
+
+                    <button id="generate-btn" class="btn btn-primary w-100 mb-2">Generate Schedule</button>
+                    <button id="export-btn" class="btn btn-success w-100">Export to Excel</button>
+                </div>
+            </div>
+
+            <!-- Calendar -->
+            <div class="col-md-9">
+                <div class="calendar-container">
+                    <div id="calendar"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal for editing shifts -->
+    <div class="modal fade" id="shiftModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Edit Shift</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="shift-form">
+                        {% csrf_token %}
+                        <div class="mb-3">
+                            <label for="employee-select" class="form-label">Employee</label>
+                            <select class="form-select" id="employee-select" required>
+                                {% for employee in employees %}
+                                <option value="{{ employee.id }}">{{ employee.name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label for="shift-select" class="form-label">Shift Type</label>
+                            <select class="form-select" id="shift-select" required>
+                                {% for shift_type in shift_types %}
+                                <option value="{{ shift_type.id }}">{{ shift_type.name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label for="date-input" class="form-label">Date</label>
+                            <input type="date" class="form-control" id="date-input" required>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" id="save-shift">Save</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/index.global.min.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const calendarEl = document.getElementById('calendar');
+            const employeeList = document.getElementById('employee-list');
+            const generateBtn = document.getElementById('generate-btn');
+            const exportBtn = document.getElementById('export-btn');
+            const shiftModal = new bootstrap.Modal(document.getElementById('shiftModal'));
+            const saveShiftBtn = document.getElementById('save-shift');
+            const employeeSelect = document.getElementById('employee-select');
+            const shiftSelect = document.getElementById('shift-select');
+            const dateInput = document.getElementById('date-input');
+
+            let selectedEmployees = [];
+            let currentEvent = null;
+
+            // Employee selection
+            employeeList.addEventListener('click', function(e) {
+                if (e.target.classList.contains('employee-item')) {
+                    const employeeId = e.target.dataset.id;
+                    const index = selectedEmployees.indexOf(employeeId);
+                    if (index > -1) {
+                        selectedEmployees.splice(index, 1);
+                        e.target.classList.remove('employee-selected');
+                    } else {
+                        selectedEmployees.push(employeeId);
+                        e.target.classList.add('employee-selected');
+                    }
+                    calendar.refetchEvents();
+                }
+            });
+
+            const calendar = new FullCalendar.Calendar(calendarEl, {
+                initialView: 'dayGridMonth',
+                editable: true,
+                selectable: true,
+                select: function(info) {
+                    // Click on empty date
+                    dateInput.value = info.startStr;
+                    employeeSelect.value = selectedEmployees[0] || '';
+                    shiftSelect.value = '';
+                    currentEvent = null;
+                    shiftModal.show();
+                },
+                eventClick: function(info) {
+                    // Click on event
+                    employeeSelect.value = info.event.extendedProps.employee_id;
+                    shiftSelect.value = info.event.extendedProps.shift_type_id;
+                    dateInput.value = info.event.startStr;
+                    currentEvent = info.event;
+                    shiftModal.show();
+                },
+                eventDrop: function(info) {
+                    // Drag and drop
+                    updateShift(info.event.extendedProps.employee_id, info.event.startStr, info.event.extendedProps.shift_type_id);
+                },
+                events: function(fetchInfo, successCallback, failureCallback) {
+                    const params = new URLSearchParams({
+                        start: fetchInfo.startStr,
+                        end: fetchInfo.endStr,
+                    });
+                    selectedEmployees.forEach(id => params.append('employee_ids', id));
+
+                    fetch(`/api/schedules/calendar_data/?${params}`)
+                        .then(response => response.json())
+                        .then(data => {
+                            successCallback(data);
+                        })
+                        .catch(failureCallback);
+                }
+            });
+
+            calendar.render();
+
+            // Generate schedule
+            generateBtn.addEventListener('click', function() {
+                const start = calendar.view.activeStart.toISOString().split('T')[0];
+                const end = calendar.view.activeEnd.toISOString().split('T')[0];
+
+                fetch('/api/schedules/generate/', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': getCookie('csrftoken')
+                    },
+                    body: JSON.stringify({
+                        start_date: start,
+                        end_date: end,
+                        employee_ids: selectedEmployees
+                    })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    alert(data.message || 'Schedule generated successfully');
+                    calendar.refetchEvents();
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    alert('Error generating schedule');
+                });
+            });
+
+            // Export
+            exportBtn.addEventListener('click', function() {
+                const start = calendar.view.activeStart.toISOString().split('T')[0];
+                const end = calendar.view.activeEnd.toISOString().split('T')[0];
+                window.open(`/api/export/?start=${start}&end=${end}`);
+            });
+
+            // Save shift
+            saveShiftBtn.addEventListener('click', function() {
+                const employeeId = employeeSelect.value;
+                const shiftTypeId = shiftSelect.value;
+                const date = dateInput.value;
+
+                if (!employeeId || !shiftTypeId || !date) {
+                    alert('Please fill all fields');
+                    return;
+                }
+
+                updateShift(employeeId, date, shiftTypeId);
+                shiftModal.hide();
+            });
+
+            function updateShift(employeeId, date, shiftTypeId) {
+                fetch('/api/update-shift/', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': getCookie('csrftoken')
+                    },
+                    body: JSON.stringify({
+                        employee_id: employeeId,
+                        date: date,
+                        shift_type_id: shiftTypeId
+                    })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    calendar.refetchEvents();
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    alert('Error updating shift');
+                });
+            }
+
+            function getCookie(name) {
+                let cookieValue = null;
+                if (document.cookie && document.cookie !== '') {
+                    const cookies = document.cookie.split(';');
+                    for (let i = 0; i < cookies.length; i++) {
+                        const cookie = cookies[i].trim();
+                        if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                            cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                            break;
+                        }
+                    }
+                }
+                return cookieValue;
+            }
+        });
+    </script>
+</body>
+</html>

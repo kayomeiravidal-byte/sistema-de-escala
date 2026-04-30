@@ -1,0 +1,93 @@
+# GitHub Actions - Build Automático do .exe para Windows
+#
+# Este workflow:
+# 1. Executa a cada push na branch main
+# 2. Gera o executável .exe para Windows
+# 3. Disponibiliza para download como artefato
+#
+# Como usar:
+# 1. Faça push deste código para o GitHub
+# 2. Vá em Actions > Build Windows EXE
+# 3. Execute o workflow
+# 4. Baixe o artefato em "Artifacts"
+
+name: Build Windows EXE
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    
+    steps:
+      - name: Checkout do código
+        uses: actions/checkout@v4
+      
+      - name: Configurar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+      
+      - name: Instalar dependências
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller
+      
+      - name: Verificar estrutura do projeto
+        run: |
+          echo "=== Estrutura do projeto ==="
+          ls -la
+          echo ""
+          echo "=== Python ==="
+          python --version
+          echo ""
+          echo "=== Dependências ==="
+          pip list
+      
+      - name: Testar execução direta
+        run: |
+          echo "=== Testando execução direta ==="
+          timeout 10 python main.py || true
+      
+      - name: Limpar builds anteriores
+        run: |
+          if (Test-Path dist) { Remove-Item -Recurse -Force dist }
+          if (Test-Path build) { Remove-Item -Recurse -Force build }
+          if (Test-Path __pycache__) { Remove-Item -Recurse -Force __pycache__ }
+      
+      - name: Gerar executável com PyInstaller
+        run: |
+          pyinstaller main.spec --clean
+      
+      - name: Listar arquivos gerados
+        run: |
+          echo "=== Arquivos gerados ==="
+          ls -la dist/
+      
+      - name: Compactar executável
+        run: |
+          Compress-Archive -Path "dist\ServidorAgenda.exe" -DestinationPath "ServidorAgenda.zip"
+          ls -la *.zip
+      
+      - name: Upload artefato
+        uses: actions/upload-artifact@v4
+        with:
+          name: ServidorAgenda-exe
+          path: |
+            dist/ServidorAgenda.exe
+            ServidorAgenda.zip
+          retention-days: 30
+      
+      - name: Criar release (opcional - só executa se for/tag)
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          $tag = $github.ref -replace 'refs/tags/', ''
+          gh release create $tag --title "Release $tag" --notes "Executável do ServidorAgenda" dist/ServidorAgenda.exe ServidorAgenda.zip
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

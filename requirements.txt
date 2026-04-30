@@ -1,0 +1,6 @@
+Django==6.0.4
+djangorestframework==3.17.1
+ortools==9.15.6755
+pandas==3.0.2
+psycopg2-binary==2.9.12
+django-cors-headers==4.9.0
