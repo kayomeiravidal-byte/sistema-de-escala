@@ -7,247 +7,279 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+
 class SchedulingService:
     def __init__(self, rule_id=None):
         if rule_id:
             try:
                 self.rule = SchedulingRule.objects.get(id=rule_id)
             except SchedulingRule.DoesNotExist:
-                raise ValidationError(f"SchedulingRule with id={rule_id} not found")
+                raise ValidationError(f"Regra de escalonamento id={rule_id} não encontrada.")
         else:
             self.rule = SchedulingRule.objects.first() or SchedulingRule.objects.create(
-                name="Default Rule",
+                name="Regra Padrão",
                 max_consecutive_days=5,
                 mandatory_rest_days=1,
-                avoid_consecutive_nights=True
+                avoid_consecutive_nights=True,
             )
 
+    @transaction.atomic
     def generate_schedule(self, start_date, end_date, employees=None):
-        logger.info(f"Generating schedule from {start_date} to {end_date}")
+        logger.info("Gerando escala de %s a %s", start_date, end_date)
+
+        delta = (end_date - start_date).days + 1
+        if delta > self.rule.max_schedule_days:
+            raise ValidationError(
+                f"O intervalo solicitado ({delta} dias) excede o limite da regra "
+                f"({self.rule.max_schedule_days} dias)."
+            )
+
         if employees is None:
-            employees = Employee.objects.filter(is_active=True)
+            employees = list(Employee.objects.filter(is_active=True))
+        else:
+            employees = list(employees)
 
-        employees = list(employees)
+        if not employees:
+            raise ValidationError("Nenhum funcionário ativo encontrado para gerar a escala.")
+
         shift_types = list(ShiftType.objects.all())
+        if not shift_types:
+            raise ValidationError("Nenhum tipo de turno cadastrado.")
 
-        # Clear existing schedules in the range for regeneration
         Schedule.objects.filter(
             date__range=(start_date, end_date),
-            employee__in=employees
+            employee__in=employees,
         ).delete()
 
-        # Use OR-Tools for optimization
-        self._optimize_schedule(start_date, end_date, employees, shift_types)
+        schedules = self._optimize_schedule(start_date, end_date, employees, shift_types)
+        Schedule.objects.bulk_create(schedules, ignore_conflicts=False)
+        logger.info("Escala gerada: %d registros criados.", len(schedules))
+        return len(schedules)
 
     def _optimize_schedule(self, start_date, end_date, employees, shift_types):
         model = cp_model.CpModel()
         solver = cp_model.CpSolver()
+        solver.parameters.max_time_in_seconds = self.rule.solver_time_limit_seconds
 
-        # Create date list
         dates = []
         current = start_date
         while current <= end_date:
             dates.append(current)
             current += timedelta(days=1)
 
-        # Variables: x[emp_id][date_idx][shift_id] = 1 if assigned
+        n_dates = len(dates)
+        max_consec = self.rule.max_consecutive_days
+        min_per_day = self.rule.min_employees_per_day
+
+        # Variables: x[(emp_id, date_idx, shift_id)] = 1 if assigned
         x = {}
-        work_vars = {}  # work_vars[emp_id][date_idx] = 1 if work shift
+        work_vars = {}
         for emp in employees:
             work_vars[emp.id] = []
-            for date_idx, date in enumerate(dates):
-                work = model.NewBoolVar(f'work_{emp.id}_{date_idx}')
+            for date_idx in range(n_dates):
+                work = model.NewBoolVar(f"work_{emp.id}_{date_idx}")
                 work_vars[emp.id].append(work)
                 for shift in shift_types:
-                    x[(emp.id, date_idx, shift.id)] = model.NewBoolVar(f'x_{emp.id}_{date_idx}_{shift.id}')
-                # Exactly one shift per day
+                    x[(emp.id, date_idx, shift.id)] = model.NewBoolVar(
+                        f"x_{emp.id}_{date_idx}_{shift.id}"
+                    )
+                # Exactly one shift per employee per day
                 model.Add(sum(x[(emp.id, date_idx, s.id)] for s in shift_types) == 1)
-                # Work indicator
+                # work indicator = sum of is_work_shift slots
                 work_shifts = [s for s in shift_types if s.is_work_shift]
                 model.Add(work == sum(x[(emp.id, date_idx, s.id)] for s in work_shifts))
 
-        # Constraints
-
-        # Max consecutive work days
+        # Max consecutive work days (sliding window)
         for emp in employees:
-            for i in range(len(dates) - self.rule.max_consecutive_days):
-                window = work_vars[emp.id][i:i + self.rule.max_consecutive_days + 1]
-                model.Add(sum(window) <= self.rule.max_consecutive_days)
+            for i in range(n_dates - max_consec):
+                window = work_vars[emp.id][i : i + max_consec + 1]
+                model.Add(sum(window) <= max_consec)
 
-        # Mandatory rest: simplified - after max consecutive work, next day off
+        # Mandatory rest after max consecutive work
+        rest = self.rule.mandatory_rest_days
         for emp in employees:
-            for i in range(len(dates) - self.rule.max_consecutive_days - self.rule.mandatory_rest_days):
-                consecutive_work = work_vars[emp.id][i:i + self.rule.max_consecutive_days]
-                rest_days = work_vars[emp.id][i + self.rule.max_consecutive_days:i + self.rule.max_consecutive_days + self.rule.mandatory_rest_days]
-                # If all consecutive are work, then all rest must be off
-                all_work = model.NewBoolVar(f'all_work_{emp.id}_{i}')
-                model.Add(sum(consecutive_work) == self.rule.max_consecutive_days).OnlyEnforceIf(all_work)
-                model.Add(sum(consecutive_work) < self.rule.max_consecutive_days).OnlyEnforceIf(all_work.Not())
+            for i in range(n_dates - max_consec - rest):
+                consecutive_work = work_vars[emp.id][i : i + max_consec]
+                rest_days = work_vars[emp.id][i + max_consec : i + max_consec + rest]
+                all_work = model.NewBoolVar(f"all_work_{emp.id}_{i}")
+                model.Add(sum(consecutive_work) == max_consec).OnlyEnforceIf(all_work)
+                model.Add(sum(consecutive_work) < max_consec).OnlyEnforceIf(all_work.Not())
                 model.Add(sum(rest_days) == 0).OnlyEnforceIf(all_work)
 
-        # Minimum work shifts per day (at least 1)
-        for date_idx in range(len(dates)):
-            model.Add(sum(work_vars[emp.id][date_idx] for emp in employees) >= 1)
+        # Minimum employees working each day
+        for date_idx in range(n_dates):
+            model.Add(
+                sum(work_vars[emp.id][date_idx] for emp in employees) >= min_per_day
+            )
 
-        # Avoid consecutive nights
+        # Avoid consecutive night shifts
         if self.rule.avoid_consecutive_nights:
-            night_shift = next((s for s in shift_types if 'night' in s.name.lower()), None)
+            night_shift = next(
+                (s for s in shift_types if "noite" in s.name.lower() or "night" in s.name.lower()),
+                None,
+            )
             if night_shift:
                 for emp in employees:
-                    for i in range(1, len(dates)):
-                        model.Add(x[(emp.id, i, night_shift.id)] + x[(emp.id, i-1, night_shift.id)] <= 1)
+                    for i in range(1, n_dates):
+                        model.Add(
+                            x[(emp.id, i, night_shift.id)]
+                            + x[(emp.id, i - 1, night_shift.id)]
+                            <= 1
+                        )
 
-        # Objective: minimize variance in total work days
+        # Objective: minimize spread of total work days across employees
         total_work = []
         for emp in employees:
-            total = model.NewIntVar(0, len(dates), f'total_{emp.id}')
+            total = model.NewIntVar(0, n_dates, f"total_{emp.id}")
             model.Add(total == sum(work_vars[emp.id]))
             total_work.append(total)
 
-        min_work = model.NewIntVar(0, len(dates), 'min_work')
-        max_work = model.NewIntVar(0, len(dates), 'max_work')
+        min_work = model.NewIntVar(0, n_dates, "min_work")
+        max_work = model.NewIntVar(0, n_dates, "max_work")
         model.AddMinEquality(min_work, total_work)
         model.AddMaxEquality(max_work, total_work)
         model.Minimize(max_work - min_work)
 
-        # Solve
         status = solver.Solve(model)
 
-        if status in [cp_model.OPTIMAL, cp_model.FEASIBLE]:
-            # Create schedules
-            for emp in employees:
-                for date_idx, date in enumerate(dates):
-                    for shift in shift_types:
-                        if solver.Value(x[(emp.id, date_idx, shift.id)]):
-                            Schedule.objects.create(
-                                employee=emp,
-                                date=date,
-                                shift_type=shift
-                            )
-                            break
-            variance = solver.Value(max_work) - solver.Value(min_work)
-            logger.info(f"Solution found with variance: {variance}")
-        else:
-            logger.warning("No feasible solution found")
-            raise OptimizationError("Solver could not find a feasible schedule for the given constraints")
-
-    def update_shift(self, employee_id, date, shift_type_id):
-        with transaction.atomic():
-            schedule, created = Schedule.objects.get_or_create(
-                employee_id=employee_id,
-                date=date,
-                defaults={'shift_type_id': shift_type_id}
+        if status not in (cp_model.OPTIMAL, cp_model.FEASIBLE):
+            logger.warning("Solver sem solução viável. Status: %s", solver.StatusName(status))
+            raise OptimizationError(
+                "O solver não encontrou uma escala viável para as restrições configuradas. "
+                "Tente ampliar o período, reduzir restrições ou aumentar o timeout."
             )
-            if not created:
-                schedule.shift_type_id = shift_type_id
-                schedule.save()
-            return schedule
+
+        variance = solver.Value(max_work) - solver.Value(min_work)
+        logger.info(
+            "Solução encontrada (status=%s, variância=%d).",
+            solver.StatusName(status),
+            variance,
+        )
+
+        schedules = []
+        for emp in employees:
+            for date_idx, date in enumerate(dates):
+                for shift in shift_types:
+                    if solver.Value(x[(emp.id, date_idx, shift.id)]):
+                        schedules.append(
+                            Schedule(employee=emp, date=date, shift_type=shift)
+                        )
+                        break
+
+        return schedules
 
 
 class ScheduleService:
     @staticmethod
     def get_calendar_data(start_date, end_date, employee_ids=None):
-        """Get schedule data formatted for calendar display"""
-        logger.debug(f"Fetching calendar data from {start_date} to {end_date}")
-        schedules = Schedule.objects.filter(
-            date__range=(start_date, end_date)
-        ).select_related('employee', 'shift_type')
-
+        logger.debug("Buscando dados de calendário de %s a %s", start_date, end_date)
+        qs = (
+            Schedule.objects.filter(date__range=(start_date, end_date))
+            .select_related("employee", "shift_type")
+            .order_by("date", "employee__name")
+        )
         if employee_ids:
-            schedules = schedules.filter(employee_id__in=employee_ids)
+            qs = qs.filter(employee_id__in=employee_ids)
 
-        events = []
-        for schedule in schedules:
-            events.append({
-                'id': schedule.id,
-                'title': f"{schedule.employee.name}: {schedule.shift_type.name}",
-                'start': str(schedule.date),
-                'backgroundColor': schedule.shift_type.color,
-                'extendedProps': {
-                    'employee_id': schedule.employee.id,
-                    'shift_type_id': schedule.shift_type.id,
-                }
-            })
-        logger.debug(f"Returning {len(events)} calendar events")
+        events = [
+            {
+                "id": s.id,
+                "title": f"{s.employee.name}: {s.shift_type.name}",
+                "start": str(s.date),
+                "backgroundColor": s.shift_type.color,
+                "extendedProps": {
+                    "employee_id": s.employee.id,
+                    "shift_type_id": s.shift_type.id,
+                },
+            }
+            for s in qs
+        ]
+        logger.debug("Retornando %d eventos.", len(events))
         return events
 
     @staticmethod
     def export_schedule_data(start_date, end_date):
-        """Get schedule data formatted for Excel export"""
-        schedules = Schedule.objects.filter(
-            date__range=(start_date, end_date)
-        ).select_related('employee', 'shift_type').order_by('employee__name', 'date')
+        qs = (
+            Schedule.objects.filter(date__range=(start_date, end_date))
+            .select_related("employee", "shift_type")
+            .order_by("employee__name", "date")
+        )
 
-        # Create DataFrame
-        data = []
-        employees = {}
-        dates = set()
+        employees: dict = {}
+        dates: set = set()
 
-        for sched in schedules:
+        for sched in qs:
             emp_name = sched.employee.name
             date_str = str(sched.date)
-            shift_name = sched.shift_type.name
-
             if emp_name not in employees:
                 employees[emp_name] = {}
-            employees[emp_name][date_str] = shift_name
+            employees[emp_name][date_str] = sched.shift_type.name
             dates.add(date_str)
 
-        dates = sorted(list(dates))
-
+        sorted_dates = sorted(dates)
+        data = []
         for emp_name in sorted(employees.keys()):
-            row = {'Employee': emp_name}
-            for date in dates:
-                row[date] = employees[emp_name].get(date, 'Off')
+            row = {"Funcionário": emp_name}
+            for d in sorted_dates:
+                row[d] = employees[emp_name].get(d, "Folga")
             data.append(row)
 
-        return data
+        return data, sorted_dates
 
     @staticmethod
+    @transaction.atomic
     def update_shift(employee_id, date, shift_type_id):
-        """Update or create a shift assignment"""
-        logger.info(f"Updating shift for employee {employee_id} on {date} to shift {shift_type_id}")
-        with transaction.atomic():
-            # Validate inputs
-            try:
-                employee = Employee.objects.get(id=employee_id)
-                shift_type = ShiftType.objects.get(id=shift_type_id)
-            except (Employee.DoesNotExist, ShiftType.DoesNotExist) as e:
-                logger.error(f"Validation error: {e}")
-                raise ValidationError("Invalid employee or shift type")
+        logger.info(
+            "Atualizando turno: funcionário=%s, data=%s, turno=%s",
+            employee_id, date, shift_type_id,
+        )
+        try:
+            employee = Employee.objects.get(id=employee_id)
+        except Employee.DoesNotExist:
+            raise ValidationError(f"Funcionário id={employee_id} não encontrado.")
 
-            schedule, created = Schedule.objects.get_or_create(
-                employee=employee,
-                date=date,
-                defaults={'shift_type': shift_type}
-            )
-            if not created:
-                schedule.shift_type = shift_type
-                schedule.save()
-            logger.info(f"Shift {'created' if created else 'updated'} successfully")
-            return schedule
+        try:
+            shift_type = ShiftType.objects.get(id=shift_type_id)
+        except ShiftType.DoesNotExist:
+            raise ValidationError(f"Tipo de turno id={shift_type_id} não encontrado.")
+
+        schedule, created = Schedule.objects.get_or_create(
+            employee=employee,
+            date=date,
+            defaults={"shift_type": shift_type},
+        )
+        if not created:
+            schedule.shift_type = shift_type
+            schedule.save(update_fields=["shift_type", "updated_at"])
+
+        logger.info("Turno %s com sucesso.", "criado" if created else "atualizado")
+        return schedule
 
     @staticmethod
     def validate_schedule_generation(start_date, end_date, employee_ids):
-        """Validate inputs for schedule generation"""
-        from datetime import date as date_type
         if not start_date or not end_date:
-            raise ValidationError("start_date and end_date are required")
+            raise ValidationError("start_date e end_date são obrigatórios.")
 
         if isinstance(start_date, str):
             try:
                 start_date = datetime.fromisoformat(start_date).date()
                 end_date = datetime.fromisoformat(end_date).date()
             except ValueError:
-                raise ValidationError("Invalid date format")
+                raise ValidationError("Formato de data inválido. Use YYYY-MM-DD.")
 
         if start_date > end_date:
-            raise ValidationError("start_date must be before end_date")
+            raise ValidationError("start_date deve ser anterior a end_date.")
 
         if employee_ids:
+            active_ids = set(
+                Employee.objects.filter(id__in=employee_ids, is_active=True).values_list("id", flat=True)
+            )
+            missing = set(employee_ids) - active_ids
+            if missing:
+                raise ValidationError(
+                    f"Funcionários não encontrados ou inativos: {sorted(missing)}."
+                )
             employees = Employee.objects.filter(id__in=employee_ids, is_active=True)
-            if len(employees) != len(employee_ids):
-                raise ValidationError("Some employees not found or inactive")
         else:
             employees = Employee.objects.filter(is_active=True)
 
