@@ -11,7 +11,6 @@ import sys
 import threading
 import webbrowser
 import socket
-from urllib.parse import urlparse
 
 # Garante que o Django encontre o projeto
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
@@ -38,13 +37,6 @@ def is_port_in_use(port):
             return False
         except OSError:
             return True
-
-
-def check_browser_open():
-    """Verifica se o navegador já está aberto - evita abas duplicadas"""
-    # Isso é verificado através da abertura da URL
-    # O webbrowser.open() abre na mesma aba se a URL já estiver aberta
-    return False
 
 
 def open_browser_once():

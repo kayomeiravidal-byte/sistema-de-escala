@@ -1,5 +1,4 @@
 from datetime import datetime, timedelta
-from collections import defaultdict
 from django.db import transaction
 from .models import Employee, ShiftType, Schedule, SchedulingRule
 from ortools.sat.python import cp_model
@@ -11,7 +10,10 @@ logger = logging.getLogger(__name__)
 class SchedulingService:
     def __init__(self, rule_id=None):
         if rule_id:
-            self.rule = SchedulingRule.objects.get(id=rule_id)
+            try:
+                self.rule = SchedulingRule.objects.get(id=rule_id)
+            except SchedulingRule.DoesNotExist:
+                raise ValidationError(f"SchedulingRule with id={rule_id} not found")
         else:
             self.rule = SchedulingRule.objects.first() or SchedulingRule.objects.create(
                 name="Default Rule",
@@ -123,9 +125,11 @@ class SchedulingService:
                                 shift_type=shift
                             )
                             break
-            logger.info(f"Solution found with variance: {solver.Value(max_work - min_work)}")
+            variance = solver.Value(max_work) - solver.Value(min_work)
+            logger.info(f"Solution found with variance: {variance}")
         else:
             logger.warning("No feasible solution found")
+            raise OptimizationError("Solver could not find a feasible schedule for the given constraints")
 
     def update_shift(self, employee_id, date, shift_type_id):
         with transaction.atomic():
@@ -226,16 +230,18 @@ class ScheduleService:
     @staticmethod
     def validate_schedule_generation(start_date, end_date, employee_ids):
         """Validate inputs for schedule generation"""
+        from datetime import date as date_type
         if not start_date or not end_date:
             raise ValidationError("start_date and end_date are required")
 
-        try:
-            start = datetime.fromisoformat(start_date).date()
-            end = datetime.fromisoformat(end_date).date()
-        except ValueError:
-            raise ValidationError("Invalid date format")
+        if isinstance(start_date, str):
+            try:
+                start_date = datetime.fromisoformat(start_date).date()
+                end_date = datetime.fromisoformat(end_date).date()
+            except ValueError:
+                raise ValidationError("Invalid date format")
 
-        if start > end:
+        if start_date > end_date:
             raise ValidationError("start_date must be before end_date")
 
         if employee_ids:
@@ -245,4 +251,4 @@ class ScheduleService:
         else:
             employees = Employee.objects.filter(is_active=True)
 
-        return start, end, employees
+        return start_date, end_date, employees
