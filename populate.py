@@ -15,22 +15,16 @@ ShiftType.objects.get_or_create(name='Cleaning', color='#9C27B0', is_work_shift=
 
 # Create employees
 Employee.objects.get_or_create(
-    name='John Doe',
     email='john@example.com',
-    hire_date=date.today(),
-    is_active=True
+    defaults={'name': 'John Doe', 'hire_date': date.today(), 'is_active': True}
 )
 Employee.objects.get_or_create(
-    name='Jane Smith',
     email='jane@example.com',
-    hire_date=date.today(),
-    is_active=True
+    defaults={'name': 'Jane Smith', 'hire_date': date.today(), 'is_active': True}
 )
 Employee.objects.get_or_create(
-    name='Bob Johnson',
     email='bob@example.com',
-    hire_date=date.today(),
-    is_active=True
+    defaults={'name': 'Bob Johnson', 'hire_date': date.today(), 'is_active': True}
 )
 
 # Create rule
