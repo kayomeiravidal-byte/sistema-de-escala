@@ -1,231 +1,358 @@
-# Professional Work Scheduling System
+````markdown
+# Sistema Profissional de Escala de Trabalho
 
-A production-ready Django + React application for employee shift scheduling with calendar UI, smart algorithms, and Excel export.
+Uma aplicação completa em **Django + React** para gerenciamento de escalas de funcionários, com interface de calendário, algoritmos inteligentes e exportação para Excel.
 
-## Tech Stack
+---
+
+# Stack Tecnológica
 
 - **Backend**: Django 6.0 + Django REST Framework
 - **Frontend**: React 18 + Vite + FullCalendar + Tailwind CSS
-- **Database**: PostgreSQL (production) / SQLite (development)
-- **Optimization**: Google OR-Tools CP-SAT solver
-- **Export**: Pandas + OpenPyXL
+- **Banco de Dados**: PostgreSQL (produção) / SQLite (desenvolvimento)
+- **Otimização**: Google OR-Tools CP-SAT Solver
+- **Exportação**: Pandas + OpenPyXL
 
-## Features
+---
 
-### Calendar Interface
-- Monthly/weekly calendar views
-- Color-coded shift types
-- Click to edit shifts
-- Drag-and-drop scheduling
-- Employee filtering
+# Funcionalidades
 
-### Smart Scheduling Engine
-- Constraint satisfaction optimization
-- Fair workload distribution
-- Configurable rules (max consecutive days, rest periods, night shift limits)
-- Minimizes variance in work hours
+## Interface de Calendário
 
-### Admin Panel
-- Manage employees and shift types
-- Override schedules manually
-- Configure scheduling rules
+- Visualização mensal e semanal
+- Tipos de turnos com cores diferentes
+- Clique para editar turnos
+- Arrastar e soltar escalas
+- Filtro por funcionário
 
-### API Endpoints
-- `GET /api/schedules/` - List schedules
-- `POST /api/schedules/` - Create schedule
-- `PUT /api/schedules/<id>/` - Update schedule
-- `DELETE /api/schedules/<id>/` - Delete schedule
-- `GET /api/employees/` - List employees
-- `GET /api/shift-types/` - List shift types
-- `POST /api/schedules/generate/` - Generate optimized schedule
-- `GET /api/schedules/calendar_data/` - Calendar events
-- `POST /api/update-shift/` - Update single shift
-- `GET /api/export/` - Export to Excel
+## Motor Inteligente de Escalonamento
 
-## Installation & Setup
+- Otimização baseada em satisfação de restrições
+- Distribuição justa da carga horária
+- Regras configuráveis:
+  - Máximo de dias consecutivos
+  - Períodos de descanso
+  - Limites de turnos noturnos
+- Minimização da diferença de horas trabalhadas
 
-### Prerequisites
+## Painel Administrativo
+
+- Gerenciamento de funcionários e tipos de turno
+- Sobrescrita manual de escalas
+- Configuração de regras de agendamento
+
+## Endpoints da API
+
+- `GET /api/schedules/` — Listar escalas
+- `POST /api/schedules/` — Criar escala
+- `PUT /api/schedules/<id>/` — Atualizar escala
+- `DELETE /api/schedules/<id>/` — Remover escala
+- `GET /api/employees/` — Listar funcionários
+- `GET /api/shift-types/` — Listar tipos de turno
+- `POST /api/schedules/generate/` — Gerar escala otimizada
+- `GET /api/schedules/calendar_data/` — Eventos do calendário
+- `POST /api/update-shift/` — Atualizar turno individual
+- `GET /api/export/` — Exportar para Excel
+
+---
+
+# Instalação e Configuração
+
+## Pré-requisitos
+
 - Python 3.12+
 - Node.js 18+
-- PostgreSQL (for production)
+- PostgreSQL (produção)
 
-### Backend Setup
+---
 
-1. **Clone and install dependencies:**
-   ```bash
-   git clone <repo>
-   cd projetos-em-Python
-   pip install -r requirements.txt
-   ```
+# Configuração do Backend
 
-2. **Database setup:**
-   - For development (SQLite):
-     ```bash
-     python manage.py migrate
-     ```
-   - For production (PostgreSQL):
-     ```bash
-     # Set DATABASE_URL environment variable
-     export DATABASE_URL="postgresql://user:password@localhost:5432/scheduling_db"
-     python manage.py migrate
-     ```
+## 1. Clonar o repositório e instalar dependências
 
-3. **Create superuser:**
-   ```bash
-   python manage.py createsuperuser
-   ```
+```bash
+git clone <repo>
+cd projetos-em-Python
+pip install -r requirements.txt
+```
 
-4. **Populate sample data:**
-   ```bash
-   python populate.py
-   ```
+## 2. Configuração do banco de dados
 
-5. **Run Django server:**
-   ```bash
-   python manage.py runserver
-   ```
-   Server runs on http://localhost:8000
+### Desenvolvimento (SQLite)
 
-### Frontend Setup
+```bash
+python manage.py migrate
+```
 
-1. **Install dependencies:**
-   ```bash
-   cd frontend
-   npm install
-   ```
+### Produção (PostgreSQL)
 
-2. **Run React development server:**
-   ```bash
-   npm run dev
-   ```
-   Frontend runs on http://localhost:5173
+```bash
+# Defina a variável DATABASE_URL
+export DATABASE_URL="postgresql://usuario:senha@localhost:5432/scheduling_db"
 
-## Usage
+python manage.py migrate
+```
 
-1. **Access the application:**
-   - Frontend: http://localhost:5173
-   - Admin: http://localhost:8000/admin/
-   - API: http://localhost:8000/api/
+## 3. Criar superusuário
 
-2. **Generate schedule:**
-   - Select employees in frontend
-   - Click "Generate Schedule"
-   - View optimized schedule in calendar
+```bash
+python manage.py createsuperuser
+```
 
-3. **Edit shifts:**
-   - Click on calendar events to edit
-   - Drag events to change dates
+## 4. Popular dados de exemplo
 
-4. **Export:**
-   - Click "Export to Excel" for formatted spreadsheet
+```bash
+python populate.py
+```
 
-## Architecture
+## 5. Executar servidor Django
 
-The application follows clean architecture principles with clear separation of concerns:
+```bash
+python manage.py runserver
+```
 
-### Layers
+Servidor disponível em:
 
-- **Views Layer** (`views.py`): HTTP request/response handling, input validation via serializers
-- **Services Layer** (`services.py`): Business logic, optimization algorithms, data processing
-- **Serializers Layer** (`serializers.py`): Data validation, transformation, API contracts
-- **Models Layer** (`models.py`): Data persistence, relationships
-- **Exceptions Layer** (`exceptions.py`): Custom error handling
+```text
+http://localhost:8000
+```
 
-### Key Principles
+---
 
-- **Single Responsibility**: Each layer has a specific purpose
-- **Dependency Inversion**: Services depend on abstractions (serializers, exceptions)
-- **Error Handling**: Custom exceptions with proper HTTP status codes
-- **Validation**: Input validation at API boundaries
-- **Logging**: Comprehensive logging for debugging and monitoring
+# Configuração do Frontend
 
-### Service Classes
+## 1. Instalar dependências
 
-- `SchedulingService`: OR-Tools optimization for schedule generation
-- `ScheduleService`: Data access and business operations for schedules
+```bash
+cd frontend
+npm install
+```
 
-### API Design
+## 2. Executar servidor React
 
-- RESTful endpoints with proper HTTP methods
-- Request/Response serializers for validation
-- Consistent error responses
-- Pagination and filtering support
+```bash
+npm run dev
+```
 
-## Deployment
+Frontend disponível em:
 
-### Production Setup
+```text
+http://localhost:5173
+```
 
-1. **Environment variables:**
-   ```bash
-   export DATABASE_URL="postgresql://..."
-   export DJANGO_SETTINGS_MODULE=scheduling_system.settings
-   export SECRET_KEY="your-secret-key"
-   ```
+---
 
-2. **Build frontend:**
-   ```bash
-   cd frontend
-   npm run build
-   ```
+# Como Usar
 
-3. **Collect static files:**
-   ```bash
-   python manage.py collectstatic
-   ```
+## 1. Acesse a aplicação
 
-4. **Use production server:**
-   - Gunicorn for Django
-   - Nginx for static files
-   - PostgreSQL database
+- Frontend: `http://localhost:5173`
+- Admin: `http://localhost:8000/admin/`
+- API: `http://localhost:8000/api/`
 
-### Docker Deployment
+## 2. Gerar escala
+
+- Selecione os funcionários no frontend
+- Clique em **"Gerar Escala"**
+- Visualize a escala otimizada no calendário
+
+## 3. Editar turnos
+
+- Clique nos eventos do calendário para editar
+- Arraste eventos para alterar datas
+
+## 4. Exportar
+
+- Clique em **"Exportar para Excel"** para gerar a planilha formatada
+
+---
+
+# Arquitetura
+
+A aplicação segue princípios de **Clean Architecture**, com clara separação de responsabilidades.
+
+## Camadas
+
+- **Views Layer (`views.py`)**
+  - Manipulação de requisições/respostas HTTP
+  - Validação de entrada via serializers
+
+- **Services Layer (`services.py`)**
+  - Regras de negócio
+  - Algoritmos de otimização
+  - Processamento de dados
+
+- **Serializers Layer (`serializers.py`)**
+  - Validação de dados
+  - Transformação de dados
+  - Contratos da API
+
+- **Models Layer (`models.py`)**
+  - Persistência de dados
+  - Relacionamentos
+
+- **Exceptions Layer (`exceptions.py`)**
+  - Tratamento personalizado de erros
+
+---
+
+# Princípios-Chave
+
+- **Responsabilidade Única**
+  - Cada camada possui um propósito específico
+
+- **Inversão de Dependência**
+  - Serviços dependem de abstrações
+
+- **Tratamento de Erros**
+  - Exceções customizadas com status HTTP apropriados
+
+- **Validação**
+  - Validação de entrada nos limites da API
+
+- **Logs**
+  - Logging completo para monitoramento e depuração
+
+---
+
+# Classes de Serviço
+
+- `SchedulingService`
+  - Otimização de escalas usando OR-Tools
+
+- `ScheduleService`
+  - Operações de negócio e acesso a dados de escalas
+
+---
+
+# Design da API
+
+- Endpoints RESTful
+- Uso correto de métodos HTTP
+- Serializers para validação
+- Respostas de erro consistentes
+- Suporte a paginação e filtros
+
+---
+
+# Deploy
+
+## Configuração de Produção
+
+### 1. Variáveis de ambiente
+
+```bash
+export DATABASE_URL="postgresql://..."
+export DJANGO_SETTINGS_MODULE=scheduling_system.settings
+export SECRET_KEY="sua-chave-secreta"
+```
+
+## 2. Build do frontend
+
+```bash
+cd frontend
+npm run build
+```
+
+## 3. Coletar arquivos estáticos
+
+```bash
+python manage.py collectstatic
+```
+
+## 4. Servidor de produção
+
+Recomendado:
+
+- Gunicorn para Django
+- Nginx para arquivos estáticos
+- PostgreSQL como banco de dados
+
+---
+
+# Deploy com Docker
 
 ```dockerfile
-# Dockerfile example
+# Exemplo de Dockerfile
 FROM python:3.12
+
 WORKDIR /app
+
 COPY requirements.txt .
 RUN pip install -r requirements.txt
+
 COPY . .
+
 RUN python manage.py collectstatic --noinput
+
 EXPOSE 8000
+
 CMD ["gunicorn", "scheduling_system.wsgi"]
 ```
 
-## API Documentation
+---
 
-All endpoints return JSON. Use tools like Postman or curl for testing.
+# Documentação da API
 
-Example: Generate schedule
+Todos os endpoints retornam JSON.
+
+Ferramentas recomendadas para testes:
+
+- Postman
+- curl
+
+## Exemplo: gerar escala
+
 ```bash
 curl -X POST http://localhost:8000/api/schedules/generate/ \
   -H "Content-Type: application/json" \
   -d '{"start_date": "2026-05-01", "end_date": "2026-05-31", "employee_ids": [1,2,3]}'
 ```
 
-## Contributing
+---
 
-1. Backend changes: Test with `python manage.py test`
-2. Frontend changes: Test with `npm run build`
-3. Follow PEP 8 and ESLint rules
+# Contribuição
 
-## License
+1. Alterações no backend:
+   ```bash
+   python manage.py test
+   ```
 
-MIT License
+2. Alterações no frontend:
+   ```bash
+   npm run build
+   ```
 
-## Frontend
+3. Siga:
+   - PEP 8
+   - Regras ESLint
 
-Uses FullCalendar with:
-- Monthly view
-- Color-coded events
-- Click to edit shifts
-- Drag-and-drop date changes
-- Real-time updates via AJAX
-- Filters by employee
+---
 
-## Export
+# Licença
 
-Excel export with:
-- Colored cells matching shift types
-- Auto-adjusted column widths
-- Sorted by date and employee
+Licença MIT
+
+---
+
+# Frontend
+
+O sistema utiliza FullCalendar com:
+
+- Visualização mensal
+- Eventos coloridos
+- Clique para editar turnos
+- Alteração de datas via drag-and-drop
+- Atualizações em tempo real via AJAX
+- Filtros por funcionário
+
+---
+
+# Exportação
+
+Exportação Excel com:
+
+- Células coloridas conforme o tipo de turno
+- Largura automática de colunas
+- Ordenação por data e funcionário
+````
