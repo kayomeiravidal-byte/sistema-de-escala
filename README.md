@@ -1,358 +1,62 @@
-````markdown
-# Sistema Profissional de Escala de Trabalho
+# SmartSchedule Pro: Gestão Inteligente de Escalas
 
-Uma aplicação completa em **Django + React** para gerenciamento de escalas de funcionários, com interface de calendário, algoritmos inteligentes e exportação para Excel.
-
----
-
-# Stack Tecnológica
-
-- **Backend**: Django 6.0 + Django REST Framework
-- **Frontend**: React 18 + Vite + FullCalendar + Tailwind CSS
-- **Banco de Dados**: PostgreSQL (produção) / SQLite (desenvolvimento)
-- **Otimização**: Google OR-Tools CP-SAT Solver
-- **Exportação**: Pandas + OpenPyXL
+Este projeto consiste em uma solução Full Stack de nível empresarial projetada para mitigar a complexidade logística na gestão de recursos humanos. O sistema automatiza a criação de escalas de trabalho utilizando Programação por Restrições (CP), garantindo conformidade regulatória e equilíbrio operacional.
 
 ---
 
-# Funcionalidades
+## Diferenciais Técnicos
 
-## Interface de Calendário
-
-- Visualização mensal e semanal
-- Tipos de turnos com cores diferentes
-- Clique para editar turnos
-- Arrastar e soltar escalas
-- Filtro por funcionário
-
-## Motor Inteligente de Escalonamento
-
-- Otimização baseada em satisfação de restrições
-- Distribuição justa da carga horária
-- Regras configuráveis:
-  - Máximo de dias consecutivos
-  - Períodos de descanso
-  - Limites de turnos noturnos
-- Minimização da diferença de horas trabalhadas
-
-## Painel Administrativo
-
-- Gerenciamento de funcionários e tipos de turno
-- Sobrescrita manual de escalas
-- Configuração de regras de agendamento
-
-## Endpoints da API
-
-- `GET /api/schedules/` — Listar escalas
-- `POST /api/schedules/` — Criar escala
-- `PUT /api/schedules/<id>/` — Atualizar escala
-- `DELETE /api/schedules/<id>/` — Remover escala
-- `GET /api/employees/` — Listar funcionários
-- `GET /api/shift-types/` — Listar tipos de turno
-- `POST /api/schedules/generate/` — Gerar escala otimizada
-- `GET /api/schedules/calendar_data/` — Eventos do calendário
-- `POST /api/update-shift/` — Atualizar turno individual
-- `GET /api/export/` — Exportar para Excel
+* **Motor de Otimização Combinatória**: Integração com o Google OR-Tools CP-SAT Solver para a resolução de problemas de satisfação de restrições (CSP).
+* **Arquitetura de Software**: Implementação baseada em Clean Architecture, garantindo o desacoplamento entre a lógica de negócio (Services), persistência de dados (Models) e interface de consumo (API).
+* **Interface Reativa**: SPA (Single Page Application) desenvolvida com React 18 e FullCalendar, focada em performance e usabilidade para o usuário final.
+* **Engenharia de Dados**: Sistema de exportação de relatórios com formatação condicional dinâmica utilizando as bibliotecas Pandas e OpenPyXL.
 
 ---
 
-# Instalação e Configuração
+## Lógica de Escalonamento e Otimização
 
-## Pré-requisitos
+O núcleo do sistema reside na camada de serviço `SchedulingService`. O algoritmo transforma regras de negócio em restrições matemáticas, buscando a minimização da variância na carga horária entre colaboradores.
 
-- Python 3.12+
-- Node.js 18+
-- PostgreSQL (produção)
+A função objetivo do motor de otimização é definida para respeitar o seguinte limite:
+
+$$\sum_{day=1}^{n} Shift_{employee} \le MaxHours$$
+
+### Regras de Negócio Implementadas
+
+1. **Conformidade Trabalhista**: Garantia de intervalos de descanso obrigatórios entre jornadas (Interjornada).
+2. **Equidade Operacional**: Algoritmo de distribuição justa para evitar a concentração de carga horária em grupos específicos de funcionários.
+3. **Gestão de Turnos Críticos**: Limitação paramétrica de sequências de turnos noturnos e monitoramento de dias consecutivos de trabalho.
 
 ---
 
-# Configuração do Backend
+## Stack Tecnológica
 
-## 1. Clonar o repositório e instalar dependências
+### Backend
+* **Linguagem**: Python 3.12
+* **Framework**: Django 6.0
+* **Interface**: Django REST Framework (DRF)
+* **Solver**: Google OR-Tools
+* **Banco de Dados**: PostgreSQL
 
-```bash
-git clone <repo>
-cd projetos-em-Python
-pip install -r requirements.txt
-```
+### Frontend
+* **Core**: React 18 (Vite)
+* **Gestão de Estado**: Context API e Hooks customizados
+* **Estilização**: Tailwind CSS
+* **Agendamento**: FullCalendar v6
 
-## 2. Configuração do banco de dados
+---
 
-### Desenvolvimento (SQLite)
-
-```bash
-python manage.py migrate
-```
-
-### Produção (PostgreSQL)
-
-```bash
-# Defina a variável DATABASE_URL
-export DATABASE_URL="postgresql://usuario:senha@localhost:5432/scheduling_db"
-
-python manage.py migrate
-```
-
-## 3. Criar superusuário
-
-```bash
-python manage.py createsuperuser
-```
-
-## 4. Popular dados de exemplo
-
-```bash
-python populate.py
-```
-
-## 5. Executar servidor Django
-
-```bash
-python manage.py runserver
-```
-
-Servidor disponível em:
+## Estrutura do Ecossistema
 
 ```text
-http://localhost:8000
-```
-
----
-
-# Configuração do Frontend
-
-## 1. Instalar dependências
-
-```bash
-cd frontend
-npm install
-```
-
-## 2. Executar servidor React
-
-```bash
-npm run dev
-```
-
-Frontend disponível em:
-
-```text
-http://localhost:5173
-```
-
----
-
-# Como Usar
-
-## 1. Acesse a aplicação
-
-- Frontend: `http://localhost:5173`
-- Admin: `http://localhost:8000/admin/`
-- API: `http://localhost:8000/api/`
-
-## 2. Gerar escala
-
-- Selecione os funcionários no frontend
-- Clique em **"Gerar Escala"**
-- Visualize a escala otimizada no calendário
-
-## 3. Editar turnos
-
-- Clique nos eventos do calendário para editar
-- Arraste eventos para alterar datas
-
-## 4. Exportar
-
-- Clique em **"Exportar para Excel"** para gerar a planilha formatada
-
----
-
-# Arquitetura
-
-A aplicação segue princípios de **Clean Architecture**, com clara separação de responsabilidades.
-
-## Camadas
-
-- **Views Layer (`views.py`)**
-  - Manipulação de requisições/respostas HTTP
-  - Validação de entrada via serializers
-
-- **Services Layer (`services.py`)**
-  - Regras de negócio
-  - Algoritmos de otimização
-  - Processamento de dados
-
-- **Serializers Layer (`serializers.py`)**
-  - Validação de dados
-  - Transformação de dados
-  - Contratos da API
-
-- **Models Layer (`models.py`)**
-  - Persistência de dados
-  - Relacionamentos
-
-- **Exceptions Layer (`exceptions.py`)**
-  - Tratamento personalizado de erros
-
----
-
-# Princípios-Chave
-
-- **Responsabilidade Única**
-  - Cada camada possui um propósito específico
-
-- **Inversão de Dependência**
-  - Serviços dependem de abstrações
-
-- **Tratamento de Erros**
-  - Exceções customizadas com status HTTP apropriados
-
-- **Validação**
-  - Validação de entrada nos limites da API
-
-- **Logs**
-  - Logging completo para monitoramento e depuração
-
----
-
-# Classes de Serviço
-
-- `SchedulingService`
-  - Otimização de escalas usando OR-Tools
-
-- `ScheduleService`
-  - Operações de negócio e acesso a dados de escalas
-
----
-
-# Design da API
-
-- Endpoints RESTful
-- Uso correto de métodos HTTP
-- Serializers para validação
-- Respostas de erro consistentes
-- Suporte a paginação e filtros
-
----
-
-# Deploy
-
-## Configuração de Produção
-
-### 1. Variáveis de ambiente
-
-```bash
-export DATABASE_URL="postgresql://..."
-export DJANGO_SETTINGS_MODULE=scheduling_system.settings
-export SECRET_KEY="sua-chave-secreta"
-```
-
-## 2. Build do frontend
-
-```bash
-cd frontend
-npm run build
-```
-
-## 3. Coletar arquivos estáticos
-
-```bash
-python manage.py collectstatic
-```
-
-## 4. Servidor de produção
-
-Recomendado:
-
-- Gunicorn para Django
-- Nginx para arquivos estáticos
-- PostgreSQL como banco de dados
-
----
-
-# Deploy com Docker
-
-```dockerfile
-# Exemplo de Dockerfile
-FROM python:3.12
-
-WORKDIR /app
-
-COPY requirements.txt .
-RUN pip install -r requirements.txt
-
-COPY . .
-
-RUN python manage.py collectstatic --noinput
-
-EXPOSE 8000
-
-CMD ["gunicorn", "scheduling_system.wsgi"]
-```
-
----
-
-# Documentação da API
-
-Todos os endpoints retornam JSON.
-
-Ferramentas recomendadas para testes:
-
-- Postman
-- curl
-
-## Exemplo: gerar escala
-
-```bash
-curl -X POST http://localhost:8000/api/schedules/generate/ \
-  -H "Content-Type: application/json" \
-  -d '{"start_date": "2026-05-01", "end_date": "2026-05-31", "employee_ids": [1,2,3]}'
-```
-
----
-
-# Contribuição
-
-1. Alterações no backend:
-   ```bash
-   python manage.py test
-   ```
-
-2. Alterações no frontend:
-   ```bash
-   npm run build
-   ```
-
-3. Siga:
-   - PEP 8
-   - Regras ESLint
-
----
-
-# Licença
-
-Licença MIT
-
----
-
-# Frontend
-
-O sistema utiliza FullCalendar com:
-
-- Visualização mensal
-- Eventos coloridos
-- Clique para editar turnos
-- Alteração de datas via drag-and-drop
-- Atualizações em tempo real via AJAX
-- Filtros por funcionário
-
----
-
-# Exportação
-
-Exportação Excel com:
-
-- Células coloridas conforme o tipo de turno
-- Largura automática de colunas
-- Ordenação por data e funcionário
-````
+├── backend/
+│   ├── api/                # Endpoints e Serializers (Camada de Interface)
+│   ├── services/           # Lógica de Negócio e Solver (Camada de Domínio)
+│   ├── scheduling_system/  # Configurações de Ambiente e Middleware
+│   └── tests/              # Testes unitários e de integração
+├── frontend/
+│   ├── src/
+│   │   ├── components/     # Unidades de UI atômicas
+│   │   ├── hooks/          # Lógica de abstração de consumo de API
+│   │   └── pages/          # Views e roteamento
+└── docker-compose.yml
