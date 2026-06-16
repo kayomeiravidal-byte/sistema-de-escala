@@ -98,7 +98,7 @@ class SchedulingService:
         # Mandatory rest after max consecutive work
         rest = self.rule.mandatory_rest_days
         for emp in employees:
-            for i in range(n_dates - max_consec - rest):
+            for i in range(n_dates - max_consec - rest + 1):
                 consecutive_work = work_vars[emp.id][i : i + max_consec]
                 rest_days = work_vars[emp.id][i + max_consec : i + max_consec + rest]
                 all_work = model.NewBoolVar(f"all_work_{emp.id}_{i}")
