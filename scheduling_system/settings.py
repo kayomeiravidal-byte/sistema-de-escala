@@ -11,7 +11,9 @@ SECRET_KEY = os.environ.get(
     "django-insecure-557j9gb6&kyvykib^o=hut&1ltrr$6s+u8pu8a)(i_2@f3ezk9",
 )
 
-DEBUG = os.environ.get("DEBUG", "True").lower() in ("true", "1", "yes")
+# Em ambientes serverless da Vercel (env VERCEL=1) o padrão é produção (False).
+_debug_default = "False" if os.environ.get("VERCEL") else "True"
+DEBUG = os.environ.get("DEBUG", _debug_default).lower() in ("true", "1", "yes")
 
 _allowed = os.environ.get("ALLOWED_HOSTS", "localhost,127.0.0.1").split(",")
 ALLOWED_HOSTS = [h.strip() for h in _allowed] + [".app.github.dev", ".vercel.app"]
