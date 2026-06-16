@@ -14,13 +14,27 @@ SECRET_KEY = os.environ.get(
 DEBUG = os.environ.get("DEBUG", "True").lower() in ("true", "1", "yes")
 
 _allowed = os.environ.get("ALLOWED_HOSTS", "localhost,127.0.0.1").split(",")
-ALLOWED_HOSTS = [h.strip() for h in _allowed] + [".app.github.dev"]
+ALLOWED_HOSTS = [h.strip() for h in _allowed] + [".app.github.dev", ".vercel.app"]
+
+# Vercel injeta o domínio do deploy em VERCEL_URL (sem o protocolo)
+_vercel_host = os.environ.get("VERCEL_URL")
+if _vercel_host:
+    ALLOWED_HOSTS.append(_vercel_host)
+# Domínio público estável do projeto (VERCEL_PROJECT_PRODUCTION_URL)
+_vercel_prod = os.environ.get("VERCEL_PROJECT_PRODUCTION_URL")
+if _vercel_prod:
+    ALLOWED_HOSTS.append(_vercel_prod)
 
 _csrf = os.environ.get(
     "CSRF_TRUSTED_ORIGINS",
     "https://*.app.github.dev,http://localhost:8000,https://localhost:8000,http://127.0.0.1:8000",
 ).split(",")
 CSRF_TRUSTED_ORIGINS = [o.strip() for o in _csrf]
+CSRF_TRUSTED_ORIGINS += ["https://*.vercel.app"]
+if _vercel_host:
+    CSRF_TRUSTED_ORIGINS.append(f"https://{_vercel_host}")
+if _vercel_prod:
+    CSRF_TRUSTED_ORIGINS.append(f"https://{_vercel_prod}")
 
 INSTALLED_APPS = [
     "django.contrib.admin",
@@ -37,6 +51,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    "whitenoise.middleware.WhiteNoiseMiddleware",
     "corsheaders.middleware.CorsMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
@@ -96,7 +111,25 @@ USE_TZ = True
 STATIC_URL = "static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
 
+# WhiteNoise: serve estáticos em produção.
+# USE_FINDERS=True permite servir direto dos apps/pacotes, sem depender de
+# `collectstatic` em build — essencial em ambientes serverless (Vercel).
+STORAGES = {
+    "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+    "staticfiles": {
+        "BACKEND": "whitenoise.storage.CompressedStaticFilesStorage",
+    },
+}
+WHITENOISE_USE_FINDERS = True
+
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+
+# Segurança em produção (atrás do proxy HTTPS do Render/Railway)
+if not DEBUG:
+    SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+    SECURE_SSL_REDIRECT = os.environ.get("SECURE_SSL_REDIRECT", "True").lower() in ("true", "1", "yes")
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
 
 # CORS
 _cors = os.environ.get(

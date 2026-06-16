@@ -1,0 +1,4 @@
+# Garante LF nos scripts executados em Linux (Render/Railway).
+# CRLF no shebang quebra a execução ("bad interpreter").
+*.sh text eol=lf
+Procfile text eol=lf

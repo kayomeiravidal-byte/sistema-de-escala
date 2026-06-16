@@ -1,0 +1,15 @@
+venv/
+.venv/
+staticfiles/
+*.pyc
+__pycache__/
+frontend/
+db.sqlite3-journal
+build.bat
+installer.bat
+setup.iss
+main.spec
+start.spec
+ServidorAgenda.zip
+dist/
+build/
